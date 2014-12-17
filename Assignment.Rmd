@@ -1,0 +1,105 @@
+Practical Machine Learning/ Prediction Assignment
+========================================================
+## Introduction
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. 
+
+One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+## Data
+### Download and load the data
+```{r}
+require(tree)
+require(caret)
+require(randomForest)
+set.seed(98765)
+
+#setwd("/Data/PracticalML")
+#download.file("http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv" , destfile = "./pml-training.csv")
+#download.file("http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv" , destfile = "./pml-testing.csv")
+trainingOrg = read.csv("pml-training.csv", na.strings=c("", "NA", "NULL"))
+testingOrg = read.csv("pml-testing.csv", na.strings=c("", "NA", "NULL"))
+dim(trainingOrg)
+```
+
+### Clean the data
+
+#### Remove variables that we believe have too many NA values.
+```{r}
+trainingOrg <- trainingOrg[ , colSums(is.na(trainingOrg)) == 0]
+dim(trainingOrg)
+```
+
+#### Remove unrelevant variables
+There are some unrelevant variables that can be removed as they are unlikely to be related to dependent variable.
+```{r}
+remove = c('X', 'user_name', 'raw_timestamp_part_1', 'raw_timestamp_part_2', 'cvtd_timestamp', 'new_window', 'num_window')
+trainingOrg <- trainingOrg[, -which(names(trainingOrg) %in% remove)]
+dim(trainingOrg)
+```
+
+### Partion data into training and testing for cross-validation
+```{r}
+inTrain <- createDataPartition(y=trainingOrg$classe, p=0.7, list=FALSE)
+training <- trainingOrg[inTrain,]
+testing <- trainingOrg[-inTrain,]
+dim(training)
+dim(testing)
+```
+
+## Analysis
+### Regression tree
+
+We fit a decision tree to the data using the tree package
+```{r}
+tree.training = tree(classe~.,data=training)
+summary(tree.training)
+```
+```{r}
+plot(tree.training)
+text(tree.training,pretty=0, cex =.8)
+```
+
+#### Cross validation
+```{r}
+tree.pred=predict(tree.training,testing,type="class")
+predMatrix = with(testing,table(tree.pred,classe))
+sum(diag(predMatrix))/sum(as.vector(predMatrix)) # error rate
+```
+Accuracy if 0.67 is not very good.
+
+### Random Forest
+We try a random forest becuase it tries an ensemble of trees
+
+```{r}
+rf.training = randomForest(classe~., data = training, ntree=100, importance=TRUE)
+rf.training
+```
+
+Plot showing the predictors having the highest impact
+```{r}
+varImpPlot(rf.training,)
+```
+#### Cross-Validation/Out of sample accuracy
+The OOB estimate of error rate is 0.61%
+```{r}
+tree.pred=predict(rf.training,testing,type="class")
+predMatrix = with(testing,table(tree.pred,classe))
+sum(diag(predMatrix))/sum(as.vector(predMatrix)) # error rate
+```
+
+We get an accuracy of 0.9949 which is pretty good, where at each tree split 7 variables were tried.
+
+## Conclusion
+Prediction for the testing data
+```{r}
+answers <- predict(rf.training, testingOrg)
+answers
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+pml_write_files(answers)
+```
